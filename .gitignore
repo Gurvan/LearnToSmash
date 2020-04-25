@@ -161,3 +161,6 @@ dmypy.json
 
 # Custom
 mca/junk.py
+mca/data
+mca/model/checkpoints/model_*
+mca/model/checkpoints/loss_*
