@@ -1,21 +1,26 @@
 class EmbedPlayer():
     def __init__(self):
-        self.n = 10
+        self.n = 8
 
     def __call__(self, player_state):
         action_state = int(player_state.action_state)
         x = player_state.x / 100.
         y = player_state.y / 100.
         percent = player_state.percent / 100.
-        facing = [0, 1] if player_state.facing > 0 else [1, 0]
-        jump_used = [0, 1] if bool(player_state.jumps_used) else [1, 0]
-        in_air = [0, 1] if player_state.in_air else [1, 0]
+        shield_size = player_state.shield_size / 60.0
+        facing = int(player_state.facing > 0)
+        jump_used = int(player_state.jumps_used > 0)
+        in_air = int(player_state.in_air)
 
         return [
                 action_state,
                 x, y,
                 percent,
-               ] + facing + jump_used + in_air
+                shield_size,
+                facing,
+                jump_used,
+                in_air
+               ]
 
 class EmbedGame():
     def __init__(self):
