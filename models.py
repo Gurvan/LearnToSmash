@@ -1,5 +1,6 @@
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.distributions import Categorical, Normal, Independent
 
 
@@ -13,7 +14,7 @@ class ObservationEmbedding(nn.Module):
 
     def embed(self, x):
         a, s = x.split([1, x.shape[-1] - 1], dim=-1)
-        actionstate = self.actionstate_embedding(a.long()).squeeze(-2)
+        actionstate = self.actionstate_embedding(a.long().clamp(0, 399)).squeeze(-2)
         return torch.cat([actionstate, s], dim=-1)
 
     def forward(self, x, return_info=False):
@@ -26,6 +27,94 @@ class ObservationEmbedding(nn.Module):
         else:
             return torch.cat([agent, opponent], dim=-1)
 
+
+# action_state, x, y, percent, shield_size, facing, jump_used, in_air
+class ObservationDecoder(nn.Module):
+    def __init__(self, embedding_dim):
+        super().__init__()
+        self.embedding_dim = embedding_dim
+        self.ssbm_actionstate_dim = 400
+        self.ssbm_logits = nn.Linear(embedding_dim, 2 * (self.ssbm_actionstate_dim + 7))
+        # self._ssbm_actionstate = nn.Linear(hidden, self._ssbm_actionstate_dim)
+        # self._ssbm_physic = nn.Linear(hidden, 2)
+        # self._ssbm_percent = nn.Linear(hidden, 1)
+        # self._ssbm_shield = nn.Linear(hidden, 1)
+        # self._ssbm_facing = nn.Linear(hidden, 1)
+        # self._ssbm_jump_used = nn.Linear(hidden, 1)
+        # self._ssbm_in_air = nn.Linear(hidden, 1)
+
+    def forward(self, x):
+        agent, opponent = self.ssbm_logits(x).chunk(2, dim=-1)
+        actionstate, physic, percent, shield, facing, jump_used, in_air = agent.split([self.ssbm_actionstate_dim, 2, 1, 1, 1, 1, 1], dim=-1)
+        percent = F.softplus(percent)
+        shield = F.softplus(shield)
+        agent_dict = dict(
+            actionstate=actionstate,
+            physic=physic,
+            percent=percent,
+            shield=shield,
+            facing=facing,
+            jump_used=jump_used,
+            in_air=in_air,
+        )
+        actionstate, physic, percent, shield, facing, jump_used, in_air = opponent.split([self.ssbm_actionstate_dim, 2, 1, 1, 1, 1, 1], dim=-1)
+        percent = F.softplus(percent)
+        shield = F.softplus(shield)
+        opponent_dict = dict(
+            actionstate=actionstate,
+            physic=physic,
+            percent=percent,
+            shield=shield,
+            facing=facing,
+            jump_used=jump_used,
+            in_air=in_air,
+        )
+        return agent_dict, opponent_dict
+
+    def split_observation(self, observation):
+        agent, opponent = observation.chunk(2, dim=-1)
+        actionstate, physic, percent, shield, facing, jump_used, in_air = agent.split([1,2,1,1,1,1,1], dim=-1)
+        agent_dict = dict(
+            actionstate=actionstate,
+            physic=physic,
+            percent=percent,
+            shield=shield,
+            facing=facing,
+            jump_used=jump_used,
+            in_air=in_air,
+        )
+        actionstate, physic, percent, shield, facing, jump_used, in_air = opponent.split([1,2,1,1,1,1,1], dim=-1)
+        opponent_dict = dict(
+            actionstate=actionstate,
+            physic=physic,
+            percent=percent,
+            shield=shield,
+            facing=facing,
+            jump_used=jump_used,
+            in_air=in_air,
+        )
+        return agent_dict, opponent_dict
+
+    def compute_loss(self, agent_pred, opponent_pred, observation):
+        agent_target, opponent_target = self.split_observation(observation)
+
+        loss = 0
+        loss += F.cross_entropy(agent_pred['actionstate'].view(-1, self.ssbm_actionstate_dim), agent_target['actionstate'].long().view(-1)).sum()
+        loss += F.mse_loss(agent_pred['physic'], agent_target['physic']).sum()
+        loss += F.mse_loss(agent_pred['percent'], agent_target['percent']).sum()
+        loss += F.mse_loss(agent_pred['shield'], agent_target['shield']).sum()
+        loss += F.binary_cross_entropy_with_logits(agent_pred['facing'], agent_target['facing']).sum()
+        loss += F.binary_cross_entropy_with_logits(agent_pred['jump_used'], agent_target['jump_used']).sum()
+        loss += F.binary_cross_entropy_with_logits(agent_pred['in_air'], agent_target['in_air']).sum()
+        
+        loss += F.cross_entropy(opponent_pred['actionstate'].view(-1, self.ssbm_actionstate_dim), opponent_target['actionstate'].long().view(-1)).sum()
+        loss += F.mse_loss(opponent_pred['physic'], opponent_target['physic']).sum()
+        loss += F.mse_loss(opponent_pred['percent'], opponent_target['percent']).sum()
+        loss += F.mse_loss(opponent_pred['shield'], opponent_target['shield']).sum()
+        loss += F.binary_cross_entropy_with_logits(opponent_pred['facing'], opponent_target['facing']).sum()
+        loss += F.binary_cross_entropy_with_logits(opponent_pred['jump_used'], opponent_target['jump_used']).sum()
+        loss += F.binary_cross_entropy_with_logits(opponent_pred['in_air'], opponent_target['in_air']).sum()
+        return loss
 
 
 class Policy(nn.Module):
