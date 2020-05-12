@@ -9,7 +9,7 @@ This repository is experimental and work in progress. No support will be provide
 
 It has been tested on Ubuntu 18.04.
 
-This uses a variant of (IMPALA)[https://arxiv.org/abs/1802.01561] made for running on a personal computer.
+This uses a variant of [IMPALA](https://arxiv.org/abs/1802.01561) made for running on a personal computer.
 
 The pretained model is not good at all at the moment.
 
