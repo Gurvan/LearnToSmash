@@ -160,7 +160,6 @@ dmypy.json
 *.code-workspace
 
 # Custom
-junk.py
-data
-mca/model/checkpoints/model_*
-mca/model/checkpoints/loss_*
+results/*
+!results/latest
+!results/pretrained
