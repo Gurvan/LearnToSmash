@@ -8,6 +8,7 @@ import torch
 from torch.optim import Adam
 
 from models import Policy, partial_load
+from utils import proximity_bonus
 
 
 class Learner(object):
@@ -47,7 +48,7 @@ class Learner(object):
         while True:
             try:
                 # Retrain on previous batch if the next one is not ready yet
-                if batch_iter < args.max_intensity:
+                if batch_iter < self.args.max_intensity:
                     observations, actions, mu_log_probs, rewards = self.queue_batch.get(block=False)
                     batch_iter = 0
                 else:
@@ -69,12 +70,18 @@ class Learner(object):
             rho = is_rate.clamp_max(rho_hat)
             # print(is_rate.shape, c.shape, rho.shape)
 
+            # Optimistic reward
             rewards_ = rewards.exp() - 1.0
-            # print(rewards_.cpu().numpy())
+            # print(rewards.cpu().numpy())
+            # Reward bonus: proximity
+            n_steps = (observations.shape[0] - 1) * observations.shape[1] * i  # total number of frames played
+            bonus = proximity_bonus(observations, self.args.act_every, alpha=max(0, 0.15 * (1e9 - n_steps) / 1e9))
+            rewards_with_bonus = rewards_ + bonus
+
 
             ###### V-trace / IMPALA
             # https://arxiv.org/abs/1802.01561
-            v, advantages = compute_vtrace(values, rewards_, c, rho, self.args.gamma)
+            v, advantages = compute_vtrace(values, rewards_with_bonus, c, rho, self.args.gamma)
             # print(v.shape, advantages.shape)
 
             value_loss = 0.5 * (v - values).pow(2).sum()
@@ -91,7 +98,7 @@ class Learner(object):
 
             self.update_state_dict()
 
-            if (i % self.args.save_interval == 0):
+            if (i % self.args.save_interval == 0) and not self.args.dummy:
                 torch.save(self.shared_state_dict.state_dict(), self.args.result_dir / "model.pth")
                 torch.save(self.shared_state_dict.state_dict(), self.args.result_dir / '..' / 'latest' / "model.pth")
             
@@ -111,14 +118,15 @@ class Learner(object):
                 t = t_
 
                 n_steps = (observations.shape[0] - 1) * observations.shape[1] * i
-                with open(self.args.result_dir / 'reward.txt', "a") as f:
-                    print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, file=f, sep=",")
-                with open(self.args.result_dir / '..' / 'latest' / 'reward.txt', "a") as f:
-                    print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, file=f, sep=",")
+                if not self.args.dummy:
+                    with open(self.args.result_dir / 'reward.txt', "a") as f:
+                        print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, bonus.mean().item() * 3600 / self.args.act_every, file=f, sep=",")
+                    with open(self.args.result_dir / '..' / 'latest' / 'reward.txt', "a") as f:
+                        print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, bonus.mean().item() * 3600 / self.args.act_every, file=f, sep=",")
 
             # Prevent from replaying the batch if the experience is too much off-policy
             if is_rate.log2().mean().abs() > 0.015:
-                batch_iter = args.max_intensity
+                batch_iter = self.args.max_intensity
             time.sleep(0.1)
 
 

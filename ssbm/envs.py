@@ -214,11 +214,12 @@ class SelfPlayEnv(BaseEnv):
         r0 = 1.0 * (died[1-self.pid] * (not self.player_in_control[1-self.pid]) - died[self.pid])   + 0.01 * (damage[1-self.pid] - damage[self.pid])
         r1 = 1.0 * (  died[self.pid] * (not self.player_in_control[self.pid])   - died[1-self.pid]) + 0.01 * (damage[self.pid] - damage[1-self.pid])
         
+        ## Bonus moved in learner.py
         # Add a bonus for proximity to help the agent at the start of learning
-        x0, y0, x1, y1 = self.obs.players[self.pid].x, self.obs.players[self.pid].y, self.obs.players[1-self.pid].x, self.obs.players[1-self.pid].y
-        d = sqrt((x0-x1)**2 + (y0-y1)**2)
-        r0 += 1/60 * 0.03 * 1/(1 + 0.1 * d)
-        r1 += 1/60 * 0.03 * 1/(1 + 0.1 * d)
+        # x0, y0, x1, y1 = self.obs.players[self.pid].x, self.obs.players[self.pid].y, self.obs.players[1-self.pid].x, self.obs.players[1-self.pid].y
+        # d = sqrt((x0-x1)**2 + (y0-y1)**2)
+        # r0 += 1/60 * 0.03 * 1/(1 + 0.1 * d)
+        # r1 += 1/60 * 0.03 * 1/(1 + 0.1 * d)
         return r0, r1
 
     def is_terminal(self):

@@ -97,14 +97,15 @@ if __name__ == '__main__':
         actors.append(actor)
 
     # Creating results dir
-    args.result_dir = filedir / 'results' / args.experiment_id
-    args.result_dir.mkdir(parents=True, exist_ok=True)
-    (filedir / 'results' / 'latest').mkdir(parents=True, exist_ok=True)
-    try:
-        (filedir / 'results' / 'latest' / 'reward.txt').unlink()
-    except:
-        pass
-    print(args, file=open(args.result_dir / "info.txt", mode='w'))
+    if not args.dummy:
+        args.result_dir = filedir / 'results' / args.experiment_id
+        args.result_dir.mkdir(parents=True, exist_ok=True)
+        (filedir / 'results' / 'latest').mkdir(parents=True, exist_ok=True)
+        try:
+            (filedir / 'results' / 'latest' / 'reward.txt').unlink()
+        except:
+            pass
+        print(args, file=open(args.result_dir / "info.txt", mode='w'))
 
 
     try:
@@ -130,10 +131,11 @@ if __name__ == '__main__':
             p.join()
 
     finally:
-        torch.save(shared_state_dict.state_dict(), args.result_dir / "model.pth")
-        torch.save(shared_state_dict.state_dict(), args.result_dir / '..' / 'latest' / "model.pth")
-        import subprocess
-        time.sleep(0.1)
-        subprocess.Popen(["pkill", "dolphin-emu"])
-        time.sleep(0.1)
-        subprocess.Popen(["pkill", "dolphin-emu"])
+        if not args.dummy:
+            torch.save(shared_state_dict.state_dict(), args.result_dir / "model.pth")
+            torch.save(shared_state_dict.state_dict(), args.result_dir / '..' / 'latest' / "model.pth")
+            import subprocess
+            time.sleep(0.1)
+            subprocess.Popen(["pkill", "dolphin-emu"])
+            time.sleep(0.1)
+            subprocess.Popen(["pkill", "dolphin-emu"])
