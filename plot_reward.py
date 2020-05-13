@@ -20,6 +20,23 @@ if __name__ == "__main__":
 
     reward = np.genfromtxt(args.file, delimiter=',')
 
-    plt.plot(reward[args.begin:, 0], reward[args.begin:, 1], alpha=0.3)
-    plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1], args.smooth), alpha=0.3)
-    plt.show()
+    if reward.shape[1] == 2:
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 1], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1], args.smooth), alpha=0.3)
+        plt.xlabel("Total frames")
+        plt.ylabel("Optimistic reward")
+        plt.show()
+
+    if reward.shape[1] > 2:
+        plt.subplot(211)
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 1], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1], args.smooth), alpha=0.3)
+        plt.ylabel("Optimistic reward")
+
+        plt.subplot(212)
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 2], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 2], args.smooth), alpha=0.3)
+        plt.xlabel("Total frames")
+        plt.ylabel("Bonus reward")
+
+        plt.show()

@@ -106,9 +106,11 @@ class Learner(object):
             if batch_iter == 1:
                 t_ = time.perf_counter()
                 i += 1
-                print("Iteration: {} / Time: {:.3f}s / Value loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.5f} / Total loss {:.3f} / Reward: {:.3f}".format(
+                n_steps = (observations.shape[0] - 1) * observations.shape[1] * i
+                print("Iteration: {} / Time: {:.3f}s / Total frames {} / Value loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.5f} / Total loss {:.3f} / Reward: {:.3f}".format(
                     i,
                     t_ - t,
+                    n_steps,
                     value_loss.item() / rho.shape[0],
                     policy_loss.item() / rho.shape[0],
                     entropy_loss.item() / rho.shape[0],
@@ -117,7 +119,7 @@ class Learner(object):
                 ))
                 t = t_
 
-                n_steps = (observations.shape[0] - 1) * observations.shape[1] * i
+                
                 if not self.args.dummy:
                     with open(self.args.result_dir / 'reward.txt', "a") as f:
                         print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, bonus.mean().item() * 3600 / self.args.act_every, file=f, sep=",")

@@ -11,7 +11,7 @@ from actor import Actor
 from learner import Learner
 from experience_buffer import ExperienceBuffer
 
-from env import SelfPlayEnv as Env
+from env import Env
 
 filedir = pathlib.Path(__file__).parent.resolve()
 
@@ -36,7 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-workers', type=int, default=2, help='Number worker (1 pool of actors sharing GPU computations)')
     parser.add_argument('--act-every', type=int, default=3, help='Send action every N frames')
     parser.add_argument('--seed', type=int, default=2020, help='Random seed')
-    parser.add_argument('--max-intensity', type=int, default=5, help="Maximum number of times an experience can be used for learning")
+    parser.add_argument('--max-intensity', type=int, default=3, help="Maximum number of times an experience can be used for learning")
     parser.add_argument('--c-hat', type=float, default=1.0, help="IMPALA hyper-parameters")
     parser.add_argument('--rho-hat', type=float, default=1.0, help="IMPALA hyper-parameters")
     parser.add_argument('--gamma', type=float, default=0.997, help="IMPALA hyper-parameters")
@@ -55,6 +55,7 @@ if __name__ == '__main__':
 
     args.gamma = args.gamma**args.act_every
     args.num_steps = int(args.num_steps / args.act_every)
+    args.options = options
 
     try:
         mp.set_start_method('forkserver', force=True)
@@ -71,7 +72,7 @@ if __name__ == '__main__':
     processes.append(p)
 
     # Getting action dim and observation dim from Env
-    env = Env(args, device='cpu', dummy=True)
+    env = Env(args, device='cpu', options=options, dummy=True)
     observation_dim = env.observation_dim
     args.action_dim = env.action_dim
     env.close()

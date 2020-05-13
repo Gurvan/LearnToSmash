@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from env import SelfPlayEnv as Env
+from env import Env
 from models import Policy
 
 class Actor(object):
@@ -19,7 +19,7 @@ class Actor(object):
     def initialize(self):
         print('Build Environment for {}'.format(self.actor_name))
         if self.env is None:
-            self.env = Env(self.args, self.device, dummy=self.args.dummy, rank=self.rank)
+            self.env = Env(self.args, self.device, options=self.args.options, dummy=self.args.dummy, rank=self.rank)
         self.policy = Policy(self.env.action_dim).to(self.device)
         self.memory = Memory()
 
