@@ -46,8 +46,8 @@ class Learner(object):
         t = time.perf_counter()
         while True:
             try:
-                # Retrazin on previous batch if the next one is not ready yet
-                if batch_iter < 1000:
+                # Retrain on previous batch if the next one is not ready yet
+                if batch_iter < args.max_intensity:
                     observations, actions, mu_log_probs, rewards = self.queue_batch.get(block=False)
                     batch_iter = 0
                 else:
@@ -118,7 +118,7 @@ class Learner(object):
 
             # Prevent from replaying the batch if the experience is too much off-policy
             if is_rate.log2().mean().abs() > 0.015:
-                batch_iter = 10000
+                batch_iter = args.max_intensity
             time.sleep(0.1)
 
 

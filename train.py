@@ -36,6 +36,7 @@ if __name__ == '__main__':
     parser.add_argument('--n-workers', type=int, default=2, help='Number worker (1 pool of actors sharing GPU computations)')
     parser.add_argument('--act-every', type=int, default=3, help='Send action every N frames')
     parser.add_argument('--seed', type=int, default=2020, help='Random seed')
+    parser.add_argument('--max-intensity', type=int, default=5, help="Maximum number of times an experience can be used for learning")
     parser.add_argument('--c-hat', type=float, default=1.0, help="IMPALA hyper-parameters")
     parser.add_argument('--rho-hat', type=float, default=1.0, help="IMPALA hyper-parameters")
     parser.add_argument('--gamma', type=float, default=0.997, help="IMPALA hyper-parameters")
