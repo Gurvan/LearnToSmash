@@ -161,5 +161,4 @@ dmypy.json
 
 # Custom
 results/*
-!results/latest
 !results/pretrained
