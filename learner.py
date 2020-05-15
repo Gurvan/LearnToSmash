@@ -62,7 +62,7 @@ class Learner(object):
             batch_iter += 1
             self.optimizer.zero_grad()
 
-            values, pi_log_probs, entropy = self.policy.evaluate_actions(observations, actions)
+            values, pi_log_probs, entropy, beliefs, prev_actions = self.policy.evaluate_actions(observations, actions)
             # print(values.shape, pi_log_probs.shape, mu_log_probs.shape, entropy.shape)
 
             is_rate = (pi_log_probs.detach() - mu_log_probs).exp()
@@ -88,9 +88,11 @@ class Learner(object):
             policy_loss = -(pi_log_probs * advantages).sum()
             entropy_loss = -entropy.sum()
             ######
+            ###### SimCore
+            simcore_loss = self.policy.simcore.compute_loss(observations, prev_actions, beliefs)
 
             # print(value_loss.item(), policy_loss.item(), entropy_loss.item())
-            loss = policy_loss + self.args.value_loss_coef * value_loss + self.args.entropy_coef * entropy_loss
+            loss = policy_loss + self.args.value_loss_coef * value_loss + self.args.entropy_coef * entropy_loss + 10 * simcore_loss
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.args.max_grad_norm)
@@ -102,18 +104,18 @@ class Learner(object):
                 torch.save(self.shared_state_dict.state_dict(), self.args.result_dir / "model.pth")
                 torch.save(self.shared_state_dict.state_dict(), self.args.result_dir / '..' / 'latest' / "model.pth")
             
-            print(is_rate.mean().item())
             if batch_iter == 1:
                 t_ = time.perf_counter()
                 i += 1
                 n_steps = (observations.shape[0] - 1) * observations.shape[1] * i
-                print("Iteration: {} / Time: {:.3f}s / Total frames {} / Value loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.5f} / Total loss {:.3f} / Reward: {:.3f}".format(
+                print("Iteration: {} / Time: {:.3f}s / Total frames {} / Value loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Pred loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
                     i,
                     t_ - t,
                     n_steps,
                     value_loss.item() / rho.shape[0],
                     policy_loss.item() / rho.shape[0],
                     entropy_loss.item() / rho.shape[0],
+                    simcore_loss.item() / self.policy.simcore.Ng / self.policy.simcore.Nt,
                     loss.item() / rho.shape[0],
                     rewards_.mean().item() * 3600 / self.args.act_every,
                 ))
@@ -122,11 +124,20 @@ class Learner(object):
                 
                 if not self.args.dummy:
                     with open(self.args.result_dir / 'reward.txt', "a") as f:
-                        print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, bonus.mean().item() * 3600 / self.args.act_every, file=f, sep=",")
+                        print(n_steps,
+                              rewards_.mean().item() * 3600 / self.args.act_every,
+                              bonus.mean().item() * 3600 / self.args.act_every,
+                              simcore_loss.item(),
+                              file=f, sep=",")
                     with open(self.args.result_dir / '..' / 'latest' / 'reward.txt', "a") as f:
-                        print(n_steps, rewards_.mean().item() * 3600 / self.args.act_every, bonus.mean().item() * 3600 / self.args.act_every, file=f, sep=",")
+                        print(n_steps,
+                              rewards_.mean().item() * 3600 / self.args.act_every,
+                              bonus.mean().item() * 3600 / self.args.act_every,
+                              simcore_loss.item(),
+                              file=f, sep=",")
 
             # Prevent from replaying the batch if the experience is too much off-policy
+            print(is_rate.mean().item())
             if is_rate.log2().mean().abs() > 0.015:
                 batch_iter = self.args.max_intensity
             time.sleep(0.1)

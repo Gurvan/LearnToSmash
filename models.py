@@ -2,6 +2,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from torch.distributions import Categorical, Normal, Independent
+import numpy as np
 
 
 class ObservationEmbedding(nn.Module):
@@ -137,6 +138,8 @@ class Policy(nn.Module):
         self.policy = nn.Linear(rnn_hidden_dim, action_dim)
         self.value = nn.Linear(rnn_hidden_dim, 1)
 
+        self.simcore = SimCore(rnn_hidden_dim, action_dim)
+
         self.rnn_hidden = None
         self.prev_action = None
 
@@ -177,6 +180,7 @@ class Policy(nn.Module):
         y = torch.cat([prev_actions, x], dim=-1)
 
         h, _ = self.rnn(y, rnn_hidden)
+        beliefs = h[:-1]
         h = h[list(range(0, observations.shape[0], n))]
         c = c[list(range(0, observations.shape[0], n))]
         h = self.post_rnn_film(h, c)
@@ -185,7 +189,7 @@ class Policy(nn.Module):
         dist = Categorical(logits=logits)
         actions_log_probs = dist.log_prob(actions)
         entropy = dist.entropy()
-        return values, actions_log_probs, entropy
+        return values, actions_log_probs, entropy, beliefs, prev_actions[1:]
 
     def get_prev_actions(self, actions, n):
         first_prev_action = torch.zeros((1, actions.shape[1], self.action_dim), device=actions.device)
@@ -196,6 +200,48 @@ class Policy(nn.Module):
     def reset_rnn(self):
         self.rnn_hidden = None
         self.prev_action = None
+
+
+class SimCore(nn.Module):
+    def __init__(self, state_dim, action_dim):
+        super().__init__()
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.Lo = 30
+        self.Nt = 6
+        self.Ng = 4
+
+        self.rnn = nn.GRU(action_dim, state_dim)
+        self.predecoder = ResidualBlock(state_dim, 64)
+        self.decoder = ObservationDecoder(embedding_dim=self.state_dim)
+
+    def compute_loss(self, observations, actions, beliefs):
+        # print("obs, actions, beliefs")
+        # print(observations.shape, actions.shape, beliefs.shape)
+        Lu = observations.shape[0] - 1 - self.Lo
+        loss = 0
+        for _ in range(self.Nt):
+            i = np.random.randint(Lu)
+            K = np.random.choice(self.Lo, self.Ng, replace=False)
+            state = beliefs[i:i+1]
+            states = []
+            # Unroll
+            # print(max(K))
+            for j in range(max(K)+1):
+                action = actions[i + j:i + j + 1]
+                # print(action, state)
+                # print(action.shape, len(state), state.shape)
+                _, state = self.rnn(action, state)
+                if j in K:
+                    states.append(state)
+            states = torch.cat(states, dim=0)
+            # print(states.shape, observations[K + i + 1].shape)
+            agent_pred, opponent_pred = self.decoder(self.predecoder(states))
+            loss += self.decoder.compute_loss(agent_pred, opponent_pred, observations[K + i + 1])
+            # print("loss", loss)
+
+        # print("loss", loss.shape)
+        return loss
 
 
 class ResidualBlock(nn.Module):

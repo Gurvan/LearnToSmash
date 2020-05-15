@@ -27,7 +27,7 @@ if __name__ == "__main__":
         plt.ylabel("Optimistic reward")
         plt.show()
 
-    if reward.shape[1] > 2:
+    if reward.shape[1] == 3:
         plt.subplot(311)
         plt.plot(reward[args.begin:, 0], reward[args.begin:, 1], alpha=0.3)
         plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1], args.smooth), alpha=0.3)
@@ -43,5 +43,32 @@ if __name__ == "__main__":
         plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1] + reward[args.begin:, 2], args.smooth), alpha=0.3)
         plt.xlabel("Total frames")
         plt.ylabel("Total reward")
+
+        plt.show()
+
+    if reward.shape[1] > 3:
+        plt.subplot(221)
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 1], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1], args.smooth), alpha=0.3)
+        plt.xlabel("Total frames")
+        plt.ylabel("Optimistic reward")
+
+        plt.subplot(222)
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 2], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 2], args.smooth), alpha=0.3)
+        plt.xlabel("Total frames")
+        plt.ylabel("Bonus reward")
+
+        plt.subplot(223)
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 1] + reward[args.begin:, 2], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 1] + reward[args.begin:, 2], args.smooth), alpha=0.3)
+        plt.xlabel("Total frames")
+        plt.ylabel("Total reward")
+
+        plt.subplot(224)
+        plt.plot(reward[args.begin:, 0], reward[args.begin:, 3], alpha=0.3)
+        plt.plot(reward[args.begin:, 0], ema(reward[args.begin:, 3], args.smooth), alpha=0.3)
+        plt.xlabel("Total frames")
+        plt.ylabel("Preciction loss")
 
         plt.show()
