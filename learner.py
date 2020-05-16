@@ -92,7 +92,7 @@ class Learner(object):
             simcore_loss = self.policy.simcore.compute_loss(observations, prev_actions, beliefs)
 
             # print(value_loss.item(), policy_loss.item(), entropy_loss.item())
-            loss = policy_loss + self.args.value_loss_coef * value_loss + self.args.entropy_coef * entropy_loss + 10 * simcore_loss
+            loss = policy_loss + self.args.value_loss_coef * value_loss + self.args.entropy_coef * entropy_loss + simcore_loss
 
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.args.max_grad_norm)
