@@ -214,6 +214,13 @@ class SelfPlayEnv(BaseEnv):
         r0 = 1.0 * (died[1-self.pid] * (not self.player_in_control[1-self.pid]) - died[self.pid])   + 0.01 * (damage[1-self.pid] - damage[self.pid])
         r1 = 1.0 * (  died[self.pid] * (not self.player_in_control[self.pid])   - died[1-self.pid]) + 0.01 * (damage[self.pid] - damage[1-self.pid])
         
+        ## Quietest controller
+        controller0 = self.obs.players[self.pid].controller
+        controller1 = self.obs.players[1-self.pid].controller
+        for c in [controller0.button_A, controller0.button_Y, controller0.stick_MAIN.x]:
+            r0 -= abs(c) / 3600.0
+        for c in [controller1.button_A, controller1.button_Y, controller1.stick_MAIN.x]:
+            r1 -= abs(c) / 3600.0
         ## Bonus moved in learner.py
         # Add a bonus for proximity to help the agent at the start of learning
         # x0, y0, x1, y1 = self.obs.players[self.pid].x, self.obs.players[self.pid].y, self.obs.players[1-self.pid].x, self.obs.players[1-self.pid].y

@@ -119,26 +119,36 @@ class ObservationDecoder(nn.Module):
 
 
 class Policy(nn.Module):
-    def __init__(self, action_dim, hidden_dim=64, rnn_hidden_dim=256, rnn_layers=1):
+    def __init__(self, action_dim, hidden_dim=256, rnn_hidden_dim=512, policy_hidden_dim=128):
         super().__init__()
         self.action_dim = action_dim
         self.hidden_dim = hidden_dim
         self.rnn_hidden_dim = rnn_hidden_dim
-        self.rnn_layers = rnn_layers
+        self.policy_hidden_dim = policy_hidden_dim
+        self.action_embedding_dim = 10
 
         self.observation_embedding = ObservationEmbedding()
         self.core = nn.Sequential(
             nn.Linear(self.observation_embedding.output_dim, hidden_dim),
             nn.ReLU(True),
-            ResidualBlock(hidden_dim, 32),
+            ResidualBlock(hidden_dim, 128),
         )
-        self.rnn = nn.GRU(action_dim + hidden_dim, rnn_hidden_dim, rnn_layers)
+        self.action_embedding = nn.Embedding(action_dim, self.action_embedding_dim)
+        self.rnn = nn.GRU(self.action_embedding_dim + hidden_dim, rnn_hidden_dim)
         self.post_rnn_film = FiLM(rnn_hidden_dim, 2)
 
-        self.policy = nn.Linear(rnn_hidden_dim, action_dim)
-        self.value = nn.Linear(rnn_hidden_dim, 1)
+        self.policy = nn.Sequential(
+            nn.Linear(rnn_hidden_dim, policy_hidden_dim),
+            nn.ELU(),
+            nn.Linear(policy_hidden_dim, action_dim),
+        )
+        self.value = nn.Sequential(
+            nn.Linear(rnn_hidden_dim, policy_hidden_dim),
+            nn.ELU(),
+            nn.Linear(policy_hidden_dim, 1),
+        )
 
-        self.simcore = SimCore(rnn_hidden_dim, action_dim)
+        self.simcore = SimCore(rnn_hidden_dim, self.action_embedding_dim)
 
         self.rnn_hidden = None
         self.prev_action = None
@@ -147,9 +157,9 @@ class Policy(nn.Module):
         obs, c = self.observation_embedding(observation, return_info=True)
         x = self.core(obs)
         if self.prev_action is None:
-            action = torch.zeros(1, x.shape[1], self.action_dim).to(x.device)
+            action = torch.zeros(1, x.shape[1], self.action_embedding_dim).to(x.device)
         else:
-            action = torch.nn.functional.one_hot(self.prev_action, self.action_dim).to(x.device).float()
+            action = self.action_embedding(self.prev_action.to(x.device))
         action = action.repeat((int(x.shape[0] / action.shape[0]), 1, 1))
         y = torch.cat([action, x], dim=-1)
 
@@ -176,7 +186,7 @@ class Policy(nn.Module):
         n = int((observations.shape[0] - 1) / (actions.shape[0] - 1))
         obs, c = self.observation_embedding(observations, return_info=True)
         x = self.core(obs)
-        prev_actions = self.get_prev_actions(actions, n)
+        prev_actions = self.get_prev_actions(actions, n).squeeze(-1)
         y = torch.cat([prev_actions, x], dim=-1)
 
         h, _ = self.rnn(y, rnn_hidden)
@@ -189,7 +199,56 @@ class Policy(nn.Module):
         dist = Categorical(logits=logits)
         actions_log_probs = dist.log_prob(actions)
         entropy = dist.entropy()
-        return values, actions_log_probs, entropy, beliefs, prev_actions[1:]
+        return values, actions_log_probs, entropy, beliefs, prev_actions[1:], dist.logits
+
+    def get_prev_actions(self, actions, n):
+        first_prev_action = torch.zeros((1, actions.shape[1], self.action_embedding_dim), device=actions.device)
+        next_prev_actions = self.action_embedding(actions.repeat_interleave(n, dim=0))
+        prev_actions = torch.cat([first_prev_action, next_prev_actions], dim=0)
+        return prev_actions
+
+    def reset_rnn(self):
+        self.rnn_hidden = None
+        self.prev_action = None
+
+
+class Teacher(nn.Module):
+    def __init__(self, action_dim, hidden_dim=64, rnn_hidden_dim=256, rnn_layers=1):
+        super().__init__()
+        self.action_dim = action_dim
+        self.hidden_dim = hidden_dim
+        self.rnn_hidden_dim = rnn_hidden_dim
+        self.rnn_layers = rnn_layers
+
+        self.observation_embedding = ObservationEmbedding()
+        self.core = nn.Sequential(
+            nn.Linear(self.observation_embedding.output_dim, hidden_dim),
+            nn.ReLU(True),
+            ResidualBlock(hidden_dim, 32),
+        )
+        self.rnn = nn.GRU(action_dim + hidden_dim, rnn_hidden_dim, rnn_layers)
+        self.post_rnn_film = FiLM(rnn_hidden_dim, 2)
+
+        self.policy = nn.Linear(rnn_hidden_dim, action_dim)
+        self.value = nn.Linear(rnn_hidden_dim, 1)
+
+        self.rnn_hidden = None
+        self.prev_action = None
+
+    def compute_actions_probs(self, observations, actions, rnn_hidden=None):
+        n = int((observations.shape[0] - 1) / (actions.shape[0] - 1))
+        obs, c = self.observation_embedding(observations, return_info=True)
+        x = self.core(obs)
+        prev_actions = self.get_prev_actions(actions, n)
+        y = torch.cat([prev_actions, x], dim=-1)
+
+        h, _ = self.rnn(y, rnn_hidden)
+        h = h[list(range(0, observations.shape[0], n))]
+        c = c[list(range(0, observations.shape[0], n))]
+        h = self.post_rnn_film(h, c)
+        logits = self.policy(h[:-1])
+        dist = Categorical(logits=logits)
+        return dist.probs.detach()
 
     def get_prev_actions(self, actions, n):
         first_prev_action = torch.zeros((1, actions.shape[1], self.action_dim), device=actions.device)

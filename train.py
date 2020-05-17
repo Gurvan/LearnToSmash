@@ -47,6 +47,7 @@ if __name__ == '__main__':
     parser.add_argument('--dummy', action="store_true", default=False, help="Used for testing implementation with dummy environments")
     parser.add_argument('--no-cuda', action="store_true", default=False, help="Disables CUDA")
     parser.add_argument('--load-model', type=str, default=None, help="Load pretrained agent")
+    parser.add_argument('--load-teacher', type=str, default=None, help="Load teacher agent")
     parser.add_argument('--reset-policy', action="store_true", default=False, help="Reset the policy part of a pretained agent. Useful for training a new character using a model pretrained on another character.")
     args = parser.parse_args()
 

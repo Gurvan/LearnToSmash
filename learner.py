@@ -5,7 +5,7 @@ from copy import deepcopy
 from collections import deque
 
 import torch
-from torch.optim import Adam
+import torch.optim as optim
 
 from models import Policy, partial_load
 from utils import proximity_bonus
@@ -18,6 +18,7 @@ class Learner(object):
         self.queue_batch = queue_batch
         self.policy = None
         self.shared_state_dict = shared_state_dict
+        self.teacher = None
         self.initialize()
 
     def initialize(self):
@@ -27,9 +28,16 @@ class Learner(object):
             if self.args.reset_policy:
                 self.policy.policy.weight.data.zero_()
                 self.policy.policy.bias.data.zero_()
-        self.optimizer = Adam(self.policy.parameters(), lr=self.args.lr)
+        self.optimizer = optim.Adam(self.policy.parameters(), lr=self.args.lr)
+        self.scheduler = optim.lr_scheduler.CosineAnnealingLR(self.optimizer, int(3e7 / (self.args.num_steps * self.args.act_every * self.args.batch_size)), eta_min=0)
         self.policy.train()
         self.update_state_dict()
+
+        if self.args.load_teacher is not None:
+            from models import Teacher
+            self.teacher = Teacher(self.policy.action_dim).to(self.device)
+            partial_load(self.teacher, self.args.load_teacher)
+            self.teacher.train()
 
     def update_state_dict(self):
         self.shared_state_dict.load_state_dict(self.policy.state_dict())
@@ -62,7 +70,7 @@ class Learner(object):
             batch_iter += 1
             self.optimizer.zero_grad()
 
-            values, pi_log_probs, entropy, beliefs, prev_actions = self.policy.evaluate_actions(observations, actions)
+            values, pi_log_probs, entropy, beliefs, prev_actions, student_log_probs = self.policy.evaluate_actions(observations, actions)
             # print(values.shape, pi_log_probs.shape, mu_log_probs.shape, entropy.shape)
 
             is_rate = (pi_log_probs.detach() - mu_log_probs).exp()
@@ -94,9 +102,17 @@ class Learner(object):
             # print(value_loss.item(), policy_loss.item(), entropy_loss.item())
             loss = policy_loss + self.args.value_loss_coef * value_loss + self.args.entropy_coef * entropy_loss + simcore_loss
 
+            if self.teacher is not None:
+                with torch.no_grad():
+                    teacher_probs = self.teacher.compute_actions_probs(observations, actions)
+                teacher_loss = -(teacher_probs * student_log_probs).sum()
+                loss += (0.9999999846494328311)**(n_steps) * teacher_loss
+                # loss = (0.9999999969298865)**n_steps * teacher_loss
+
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.args.max_grad_norm)
             self.optimizer.step()
+            self.scheduler.step()
 
             self.update_state_dict()
 
@@ -108,7 +124,7 @@ class Learner(object):
                 t_ = time.perf_counter()
                 i += 1
                 n_steps = (observations.shape[0] - 1) * observations.shape[1] * i
-                print("Iteration: {} / Time: {:.3f}s / Total frames {} / Value loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Pred loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
+                print("Iteration: {} / Time: {:.3f}s / Total frames {} / Value loss {:.3f} / Policy loss {:.3f} / Entropy loss {:.3f} / Pred loss {:.3f} / Teacher loss {:.3f} / Total loss {:.3f} / Reward: {:.3f}".format(
                     i,
                     t_ - t,
                     n_steps,
@@ -116,24 +132,26 @@ class Learner(object):
                     policy_loss.item() / rho.shape[0],
                     entropy_loss.item() / rho.shape[0],
                     simcore_loss.item() / self.policy.simcore.Ng / self.policy.simcore.Nt,
+                    teacher_loss.item() / rho.shape[0] if self.teacher is not None else 0.0,
                     loss.item() / rho.shape[0],
                     rewards_.mean().item() * 3600 / self.args.act_every,
                 ))
                 t = t_
 
-                
                 if not self.args.dummy:
                     with open(self.args.result_dir / 'reward.txt', "a") as f:
                         print(n_steps,
                               rewards_.mean().item() * 3600 / self.args.act_every,
                               bonus.mean().item() * 3600 / self.args.act_every,
                               simcore_loss.item(),
+                              teacher_loss.item() if self.teacher is not None else 0.0,
                               file=f, sep=",")
                     with open(self.args.result_dir / '..' / 'latest' / 'reward.txt', "a") as f:
                         print(n_steps,
                               rewards_.mean().item() * 3600 / self.args.act_every,
                               bonus.mean().item() * 3600 / self.args.act_every,
                               simcore_loss.item(),
+                              teacher_loss.item() if self.teacher is not None else 0.0,
                               file=f, sep=",")
 
             # Prevent from replaying the batch if the experience is too much off-policy
