@@ -105,7 +105,10 @@ if __name__ == '__main__':
         args.opponent_dir = args.result_dir / 'opponents'
         if args.load_model is not None:
             shutil.copytree(pathlib.Path(args.load_model).parent.resolve(), args.result_dir)
-            shutil.rmtree(filedir / 'results' / 'latest')
+            try:
+                shutil.rmtree(filedir / 'results' / 'latest')
+            except:
+                pass
             shutil.copytree(pathlib.Path(args.load_model).parent.resolve(), filedir / 'results' / 'latest')
         else:
             args.opponent_dir.mkdir(parents=True, exist_ok=True)
