@@ -337,10 +337,11 @@ class FiLM(nn.Module):
         return gamma * x + beta
 
 
-def partial_load(model, path):
+def partial_load(model, path, debug=True):
     old_dict = torch.load(path, map_location='cpu')
     model_dict = model.state_dict()
-    print("Non-matching keys: ", {k for k, _ in old_dict.items() if not (k in model_dict and model_dict[k].shape == old_dict[k].shape)})
+    if debug:
+        print("Non-matching keys: ", {k for k, _ in old_dict.items() if not (k in model_dict and model_dict[k].shape == old_dict[k].shape)})
     old_dict = {k: v for k, v in old_dict.items() if k in model_dict and model_dict[k].shape == old_dict[k].shape}
     model_dict.update(old_dict)
     model.load_state_dict(model_dict)

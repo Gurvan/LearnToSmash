@@ -37,7 +37,7 @@ class Learner(object):
             from models import Teacher
             self.teacher = Teacher(self.policy.action_dim).to(self.device)
             partial_load(self.teacher, self.args.load_teacher)
-            self.teacher.train()
+            self.teacher.eval()
 
     def update_state_dict(self):
         self.shared_state_dict.load_state_dict(self.policy.state_dict())
@@ -50,7 +50,10 @@ class Learner(object):
 
         observations, actions, mu_log_probs, rewards = self.queue_batch.get(block=True)
         # print(observations.shape, actions.shape, mu_log_probs.shape, rewards.shape)
-        i = 0
+        try:
+            i = read_reward_file(self.args.result_dir / "reward.txt")
+        except:
+            i = 0
         batch_iter = 0
         t = time.perf_counter()
         while True:
@@ -83,7 +86,12 @@ class Learner(object):
             # print(rewards.cpu().numpy())
             # Reward bonus: proximity
             n_steps = (observations.shape[0] - 1) * observations.shape[1] * i  # total number of frames played
-            bonus = proximity_bonus(observations, self.args.act_every, alpha=max(0, 0.15 * (1e9 - n_steps) / 1e9))
+
+            # if self.teacher is None:
+            if False:
+                bonus = proximity_bonus(observations, self.args.act_every, alpha=max(0, 0.15 * (1e9 - n_steps) / 1e9))
+            else:
+                bonus = torch.tensor(0.0, device=rewards_.device)
             rewards_with_bonus = rewards_ + bonus
 
 
@@ -112,14 +120,16 @@ class Learner(object):
             loss.backward()
             torch.nn.utils.clip_grad_norm_(self.policy.parameters(), self.args.max_grad_norm)
             self.optimizer.step()
-            self.scheduler.step()
+            # self.scheduler.step()
 
             self.update_state_dict()
 
             if (i % self.args.save_interval == 0) and not self.args.dummy:
                 torch.save(self.shared_state_dict.state_dict(), self.args.result_dir / "model.pth")
                 torch.save(self.shared_state_dict.state_dict(), self.args.result_dir / '..' / 'latest' / "model.pth")
-            
+            if (i % 100 == 0)  and not self.args.dummy:
+                torch.save(self.shared_state_dict.state_dict(), self.args.opponent_dir / ("model_" + str(n_steps) + ".pth"))
+
             if batch_iter == 1:
                 t_ = time.perf_counter()
                 i += 1
@@ -177,3 +187,9 @@ def compute_vtrace(values, rewards, c, rho, discounts):
         v = torch.stack(tuple(reversed(v)), dim=0)
         advantages = rho * (rewards + discounts * v[1:] - values[:-1])
         return v.detach(), advantages.detach()
+
+
+import numpy as np
+def read_reward_file(path):
+    reward = np.genfromtxt(str(path), delimiter=',')
+    return len(reward)

@@ -1,5 +1,6 @@
 import time
 import pathlib
+import shutil
 import argparse
 from datetime import datetime
 
@@ -30,8 +31,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--experiment_id', type=str, default=str(datetime.now()), help='Experiment ID')
     parser.add_argument('--lr', type=float, default=3e-5, help='Learning rate')
-    parser.add_argument('--batch-size', type=int, default=64)
-    parser.add_argument('--num-steps', type=int, default=300, help='Number of frames played per actor per rollout')
+    parser.add_argument('--batch-size', type=int, default=50)
+    parser.add_argument('--num-steps', type=int, default=600, help='Number of frames played per actor per rollout')
     parser.add_argument('--n-actors-per-worker', type=int, default=4, help='Number of actors per worker')
     parser.add_argument('--n-workers', type=int, default=2, help='Number worker (1 pool of actors sharing GPU computations)')
     parser.add_argument('--act-every', type=int, default=3, help='Send action every N frames')
@@ -101,13 +102,20 @@ if __name__ == '__main__':
     # Creating results dir
     if not args.dummy:
         args.result_dir = filedir / 'results' / args.experiment_id
-        args.result_dir.mkdir(parents=True, exist_ok=True)
-        (filedir / 'results' / 'latest').mkdir(parents=True, exist_ok=True)
-        try:
-            (filedir / 'results' / 'latest' / 'reward.txt').unlink()
-        except:
-            pass
-        print(args, file=open(args.result_dir / "info.txt", mode='w'))
+        args.opponent_dir = args.result_dir / 'opponents'
+        if args.load_model is not None:
+            shutil.copytree(pathlib.Path(args.load_model).parent.resolve(), args.result_dir)
+            shutil.rmtree(filedir / 'results' / 'latest')
+            shutil.copytree(pathlib.Path(args.load_model).parent.resolve(), filedir / 'results' / 'latest')
+        else:
+            args.opponent_dir.mkdir(parents=True, exist_ok=True)
+            (filedir / 'results' / 'latest').mkdir(parents=True, exist_ok=True)
+            try:
+                (filedir / 'results' / 'latest' / 'reward.txt').unlink()
+            except:
+                pass
+        print(args, file=open(args.result_dir / "info.txt", mode='a'))
+        print(args, file=open(filedir / 'results' / 'latest' / "info.txt", mode='a'))
 
 
     try:
