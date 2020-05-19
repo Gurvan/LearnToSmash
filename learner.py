@@ -87,7 +87,7 @@ class Learner(object):
             # Reward bonus: proximity
             n_steps = (observations.shape[0] - 1) * observations.shape[1] * i  # total number of frames played
 
-            if self.teacher is None and self.load_model is None:
+            if self.teacher is None and self.args.load_model is None:
                 bonus = proximity_bonus(observations, self.args.act_every, alpha=max(0, 0.15 * (1e9 - n_steps) / 1e9))
             else:
                 bonus = torch.tensor(0.0, device=rewards_.device)

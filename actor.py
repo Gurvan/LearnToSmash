@@ -119,7 +119,7 @@ def reload_opponent(opponent, path):
                 # o = np.random.choice(opponents[:-1])
                 o = np.random.choice(opponents)
                 # print("Reloading", o)
-                partial_load(opponent, path / np.random.choice(opponents), debug=False)
+                partial_load(opponent, path / o, debug=True)
                 return True
     except:
         return False
